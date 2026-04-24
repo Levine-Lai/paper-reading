@@ -1,0 +1,19 @@
+{
+  "name": "paper-reading",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "build": "vite build",
+    "build:extension": "vite build",
+    "preview": "vite preview --host 127.0.0.1"
+  },
+  "dependencies": {
+    "lucide": "^0.468.0",
+    "pdfjs-dist": "^4.8.69"
+  },
+  "devDependencies": {
+    "vite": "^8.0.10"
+  }
+}
