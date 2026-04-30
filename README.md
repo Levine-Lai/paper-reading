@@ -35,3 +35,15 @@ npm.cmd run dev
 - 扩充词库到 BNC/COCA 频率、CET4/6、考研、AWL 等分层数据。
 - 增加更稳的浏览器内置 PDF viewer 兼容策略。
 - 增加开关后的熟词屏蔽、词库分层和悬浮释义快捷键。
+
+## 个人数据同步
+
+生词库和移除词默认存放在浏览器的 `chrome.storage.local`，不会自动出现在 Git 仓库里。
+
+如果要在多台电脑间用 Git 同步：
+
+1. 打开插件弹窗里的 `生词库`。
+2. 点击 `导出同步 JSON`。
+3. 把下载的文件放到 `user-data/paper-reading-sync.json`。
+4. 提交到 Git。
+5. 另一台电脑拉取后，在 `生词库` 中点击 `导入同步 JSON`。

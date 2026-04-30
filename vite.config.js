@@ -11,6 +11,7 @@ export default defineConfig({
         reader: resolve(__dirname, "reader.html"),
         overlay: resolve(__dirname, "overlay.html"),
         popup: resolve(__dirname, "popup.html"),
+        vocab: resolve(__dirname, "vocab.html"),
         background: resolve(__dirname, "src/background.js")
       },
       output: {

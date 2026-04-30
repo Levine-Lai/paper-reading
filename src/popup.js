@@ -1,5 +1,5 @@
 import "./popup.css";
-import { BookOpenText, CheckCircle2, CircleSlash, ExternalLink, Eye, Power, RefreshCw, createElement } from "lucide";
+import { BookOpenText, CircleSlash, ExternalLink, Eye, Power, RefreshCw, createElement } from "lucide";
 
 const popup = document.querySelector("#popup");
 
@@ -9,7 +9,7 @@ popup.innerHTML = `
       <div class="popup-mark"><i data-lucide="book-open-text"></i></div>
       <div class="popup-title">
         <strong>Paper Reading</strong>
-        <span>PDF vocabulary highlighter</span>
+        <span>web article highlighter</span>
       </div>
     </section>
 
@@ -17,11 +17,15 @@ popup.innerHTML = `
       <div class="state-icon"><i data-lucide="eye"></i></div>
       <div>
         <strong id="state-title">正在检测</strong>
-        <span id="state-detail">检查当前标签页是否可用</span>
+        <span id="state-detail">检查当前页面是否可用</span>
       </div>
     </section>
 
     <section class="popup-actions">
+      <button id="open-vocab" class="popup-button" type="button">
+        <i data-lucide="book-open-text"></i>
+        <span>打开生词库</span>
+      </button>
       <button id="enable-highlights" class="popup-button" type="button">
         <i data-lucide="power"></i>
         <span>开启标黄</span>
@@ -30,9 +34,9 @@ popup.innerHTML = `
         <i data-lucide="circle-slash"></i>
         <span>关闭标黄</span>
       </button>
-      <button id="open-reader" class="popup-button secondary" type="button" hidden>
+      <button id="open-pdf-reader" class="popup-button secondary" type="button" hidden>
         <i data-lucide="external-link"></i>
-        <span>用插件阅读器打开</span>
+        <span>用插件阅读器打开 PDF</span>
       </button>
       <button id="check-status" class="popup-button ghost" type="button">
         <i data-lucide="refresh-cw"></i>
@@ -40,14 +44,13 @@ popup.innerHTML = `
       </button>
     </section>
 
-    <p id="popup-status" class="popup-status">请先正常打开一个本地 PDF，再点击开启。</p>
-    <p class="popup-note">如果显示未连接，请在扩展详情页开启“允许访问文件网址”，然后刷新 PDF 页面。</p>
+    <p id="popup-status" class="popup-status">在网页文章页面点击“开启标黄”。</p>
+    <p class="popup-note">普通网页可直接标黄；浏览器内置 PDF 查看器通常不能被直接注入，需要使用插件阅读器。</p>
   </main>
 `;
 
 const ICONS = {
   "book-open-text": BookOpenText,
-  "check-circle-2": CheckCircle2,
   "circle-slash": CircleSlash,
   "external-link": ExternalLink,
   eye: Eye,
@@ -68,82 +71,102 @@ const els = {
   stateTitle: document.querySelector("#state-title"),
   stateDetail: document.querySelector("#state-detail"),
   status: document.querySelector("#popup-status"),
+  openVocab: document.querySelector("#open-vocab"),
   enable: document.querySelector("#enable-highlights"),
   disable: document.querySelector("#disable-highlights"),
-  openReader: document.querySelector("#open-reader"),
+  openPdfReader: document.querySelector("#open-pdf-reader"),
   check: document.querySelector("#check-status")
 };
 
 let activeTab = null;
 let currentPdfUrl = "";
+let currentPageKind = "unknown";
 
+els.openVocab.addEventListener("click", () => openVocab());
 els.enable.addEventListener("click", () => setHighlights(true));
 els.disable.addEventListener("click", () => setHighlights(false));
-els.openReader.addEventListener("click", () => openReaderFallback());
+els.openPdfReader.addEventListener("click", () => openPdfReader());
 els.check.addEventListener("click", () => refreshStatus());
 
 refreshStatus();
 
+async function openVocab() {
+  await chrome.tabs.create({ url: chrome.runtime.getURL("vocab.html") });
+  window.close();
+}
+
 async function refreshStatus() {
   activeTab = await getActiveTab();
-  currentPdfUrl = extractPdfUrl(activeTab?.url || "");
-  if (!currentPdfUrl) {
+  const url = activeTab?.url || "";
+  currentPdfUrl = extractPdfUrl(url);
+  currentPageKind = getPageKind(url);
+
+  if (currentPageKind === "unsupported") {
     renderState({
       connected: false,
       enabled: false,
-      title: "不是本地 PDF",
-      detail: "当前标签页不是 file:// PDF",
-      message: "请先用浏览器正常打开一个本地 PDF。",
-      canUseReader: false
+      title: "此页面不支持",
+      detail: "扩展不能注入浏览器内部页面",
+      message: "请在普通网页文章、https 网站，或本地 PDF 页面使用。",
+      showPdfReader: false
     });
     return;
   }
 
   const result = await sendToActiveTab({ type: "paper-reading-status" });
-  if (!result?.connected) {
+  if (result?.connected) {
+    const countText = result.enabled ? `已标出 ${result.count || 0} 个词` : "可以点击开启标黄";
+    renderState({
+      connected: true,
+      enabled: result.enabled,
+      title: result.enabled ? "标黄已开启" : "网页文章已连接",
+      detail: result.pageType === "web" ? countText : "当前页面已连接插件",
+      message: result.enabled ? "悬停黄色单词可查看中文释义。" : "点击“开启标黄”会扫描当前网页正文。",
+      showPdfReader: false
+    });
+    return;
+  }
+
+  if (currentPdfUrl) {
     renderState({
       connected: false,
       enabled: false,
-      title: "原生查看器不可注入",
-      detail: "当前 PDF 页面没有可通信脚本",
-      message: "Chrome/Edge 内置 PDF 查看器通常不允许扩展直接加 DOM 标注。可以用插件阅读器打开当前 PDF 来验证标黄。",
-      canUseReader: true
+      title: "原生 PDF 不可注入",
+      detail: "浏览器内置 PDF 查看器没有响应",
+      message: "可以用插件阅读器打开当前 PDF；普通网页文章则可直接标黄。",
+      showPdfReader: true
     });
     return;
   }
 
   renderState({
-    connected: true,
-    enabled: result.enabled,
-    title: result.enabled ? "标黄已开启" : "标黄已关闭",
-    detail: "当前 PDF 已连接插件",
-    message: result.enabled ? "标注层正在工作。再次点击关闭即可移除。" : "可以点击“开启标黄”测试。",
-    canUseReader: true
+    connected: false,
+    enabled: false,
+    title: "网页脚本未连接",
+    detail: "当前网站没有响应插件",
+    message: "请刷新页面后重试。若仍失败，可能是该网站限制扩展脚本。",
+    showPdfReader: false
   });
 }
 
 async function setHighlights(enabled) {
   activeTab = activeTab || (await getActiveTab());
-  currentPdfUrl = extractPdfUrl(activeTab?.url || "");
-  if (!currentPdfUrl) {
+  const url = activeTab?.url || "";
+  currentPdfUrl = extractPdfUrl(url);
+  currentPageKind = getPageKind(url);
+
+  if (currentPageKind === "unsupported") {
     await refreshStatus();
     return;
   }
 
   const result = await sendToActiveTab({
     type: enabled ? "paper-reading-enable" : "paper-reading-disable",
-    sourceUrl: activeTab.url
+    sourceUrl: url
   });
 
   if (!result?.connected) {
-    renderState({
-      connected: false,
-      enabled: false,
-      title: "无法注入当前 PDF",
-      detail: "浏览器内置 PDF 查看器拒绝脚本",
-      message: "这类页面无法直接叠加标黄层。请点“用插件阅读器打开”测试当前 PDF。",
-      canUseReader: true
-    });
+    await refreshStatus();
     return;
   }
 
@@ -151,13 +174,13 @@ async function setHighlights(enabled) {
     connected: true,
     enabled: result.enabled,
     title: result.enabled ? "标黄已开启" : "标黄已关闭",
-    detail: "当前 PDF 已连接插件",
-    message: result.enabled ? "如果页面右下角出现提示，说明 overlay 已加载。" : "标注层已移除。",
-    canUseReader: true
+    detail: result.enabled ? `已标出 ${result.count || 0} 个词` : "当前页面已恢复",
+    message: result.enabled ? "悬停黄色单词可查看中文释义。" : "标黄已移除。",
+    showPdfReader: false
   });
 }
 
-async function openReaderFallback() {
+async function openPdfReader() {
   if (!currentPdfUrl) {
     await refreshStatus();
     return;
@@ -183,7 +206,7 @@ async function sendToActiveTab(message) {
   }
 }
 
-function renderState({ connected, enabled, title, detail, message, canUseReader }) {
+function renderState({ connected, enabled, title, detail, message, showPdfReader }) {
   els.stateCard.classList.toggle("connected", connected);
   els.stateCard.classList.toggle("enabled", enabled);
   els.stateTitle.textContent = title;
@@ -191,21 +214,33 @@ function renderState({ connected, enabled, title, detail, message, canUseReader 
   els.status.textContent = message;
   els.enable.disabled = !connected || enabled;
   els.disable.disabled = !connected || !enabled;
-  els.openReader.hidden = !canUseReader;
+  els.openPdfReader.hidden = !showPdfReader;
   updateBadge(enabled);
 }
 
 async function updateBadge(enabled) {
   try {
-    const options = activeTab?.id ? { tabId: activeTab.id, text: enabled ? "ON" : "" } : { text: enabled ? "ON" : "" };
-    await chrome.action.setBadgeText(options);
+    const badge = activeTab?.id ? { tabId: activeTab.id, text: enabled ? "ON" : "" } : { text: enabled ? "ON" : "" };
+    await chrome.action.setBadgeText(badge);
     if (enabled) {
-      const colorOptions = activeTab?.id ? { tabId: activeTab.id, color: "#2f756b" } : { color: "#2f756b" };
-      await chrome.action.setBadgeBackgroundColor(colorOptions);
+      const color = activeTab?.id ? { tabId: activeTab.id, color: "#2f756b" } : { color: "#2f756b" };
+      await chrome.action.setBadgeBackgroundColor(color);
     }
   } catch {
-    // The popup state is still useful even if the browser refuses a badge update.
+    // Popup state is still useful if the browser refuses a badge update.
   }
+}
+
+function getPageKind(url) {
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol === "http:" || parsed.protocol === "https:") return "web";
+    if (parsed.protocol === "file:" && /\.pdf$/i.test(decodeURIComponent(parsed.pathname))) return "pdf";
+  } catch {
+    return "unsupported";
+  }
+
+  return "unsupported";
 }
 
 function extractPdfUrl(url) {

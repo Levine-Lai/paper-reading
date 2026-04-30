@@ -140,6 +140,10 @@ button {
   cursor: pointer;
 }
 
+.popup-button + .popup-button {
+  margin-top: 0;
+}
+
 .popup-button.secondary {
   border-color: var(--line);
   background: #ffffff;

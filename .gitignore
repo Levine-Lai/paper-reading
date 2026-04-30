@@ -1,0 +1,11 @@
+node_modules/
+dist/
+data/
+.vite-dev*.log
+
+# Personal exported sync snapshot. Keep the example file tracked.
+user-data/paper-reading-sync.json
+
+# OS/editor noise
+.DS_Store
+Thumbs.db

@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Paper Reading",
   "version": "0.1.0",
-  "description": "Local PDF reader that highlights useful English vocabulary for learners.",
+  "description": "Highlight useful English vocabulary on web articles and local PDFs.",
   "action": {
     "default_title": "Paper Reading",
     "default_popup": "popup.html"
@@ -11,9 +11,14 @@
     "service_worker": "background.js",
     "type": "module"
   },
-  "permissions": ["tabs"],
-  "host_permissions": ["file:///*"],
+  "permissions": ["tabs", "storage"],
+  "host_permissions": ["file:///*", "http://*/*", "https://*/*"],
   "content_scripts": [
+    {
+      "matches": ["http://*/*", "https://*/*"],
+      "js": ["web-content.js"],
+      "run_at": "document_idle"
+    },
     {
       "matches": ["file:///*"],
       "js": ["content-toggle.js"],
@@ -22,8 +27,8 @@
   ],
   "web_accessible_resources": [
     {
-      "resources": ["overlay.html", "reader.html", "assets/*"],
-      "matches": ["file:///*"]
+      "resources": ["overlay.html", "reader.html", "assets/*", "dict/*.json"],
+      "matches": ["file:///*", "http://*/*", "https://*/*"]
     }
   ]
 }
