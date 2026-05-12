@@ -2,6 +2,7 @@ import "./overlay.css";
 import * as pdfjsLib from "pdfjs-dist";
 import workerUrl from "pdfjs-dist/build/pdf.worker.mjs?url";
 import { getWordInsight } from "./lexicon.js";
+import { buildInsightOptions, loadSettings } from "./settings.js";
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = chrome.runtime.getURL(workerUrl.replace(/^\.\//, ""));
 
@@ -19,6 +20,7 @@ const measureContext = measureCanvas.getContext("2d");
 let pdf = null;
 let pageModels = [];
 let renderToken = 0;
+let insightOptions = buildInsightOptions({ profile: "balanced" });
 let parentViewport = {
   scrollX: 0,
   scrollY: 0,
@@ -38,10 +40,15 @@ window.addEventListener("message", (event) => {
   renderOverlay();
 });
 
-if (sourceUrl) {
-  loadPdf(sourceUrl);
-} else {
-  showStatus("没有检测到 PDF 地址。");
+init();
+
+async function init() {
+  insightOptions = buildInsightOptions(await loadSettings());
+  if (sourceUrl) {
+    loadPdf(sourceUrl);
+  } else {
+    showStatus("没有检测到 PDF 地址。");
+  }
 }
 
 async function loadPdf(url) {
@@ -139,7 +146,7 @@ function addHighlights(pageElement, model, scale) {
 
     for (const match of matches) {
       const rawWord = match[0];
-      const insight = getWordInsight(rawWord, { threshold: 2, allowHeuristic: true });
+      const insight = getWordInsight(rawWord, insightOptions);
       if (!insight) continue;
 
       const start = metrics.offsetAt(match.index);

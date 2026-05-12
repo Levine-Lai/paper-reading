@@ -1,5 +1,6 @@
 import "./popup.css";
 import { BookOpenText, CircleSlash, ExternalLink, Eye, Power, RefreshCw, createElement } from "lucide";
+import { getProfileConfig, loadSettings, PROFILE_CONFIGS, saveSettings } from "./settings.js";
 
 const popup = document.querySelector("#popup");
 
@@ -19,6 +20,25 @@ popup.innerHTML = `
         <strong id="state-title">正在检测</strong>
         <span id="state-detail">检查当前页面是否可用</span>
       </div>
+    </section>
+
+    <section class="settings-card" aria-label="标黄策略">
+      <div class="settings-head">
+        <strong>标黄策略</strong>
+        <span id="profile-detail">学术词和常见难词优先</span>
+      </div>
+      <div class="profile-grid">
+        ${Object.entries(PROFILE_CONFIGS).map(([key, profile]) => `
+          <button class="${key === "balanced" ? "active" : ""}" type="button" data-profile="${key}">
+            <strong>${profile.label}</strong>
+            <span>${profile.detail}</span>
+          </button>
+        `).join("")}
+      </div>
+      <label class="settings-toggle">
+        <input id="allow-heuristic" type="checkbox" checked />
+        <span>允许低频词形推断</span>
+      </label>
     </section>
 
     <section class="popup-actions">
@@ -71,6 +91,9 @@ const els = {
   stateTitle: document.querySelector("#state-title"),
   stateDetail: document.querySelector("#state-detail"),
   status: document.querySelector("#popup-status"),
+  profileDetail: document.querySelector("#profile-detail"),
+  profileButtons: document.querySelectorAll("[data-profile]"),
+  allowHeuristic: document.querySelector("#allow-heuristic"),
   openVocab: document.querySelector("#open-vocab"),
   enable: document.querySelector("#enable-highlights"),
   disable: document.querySelector("#disable-highlights"),
@@ -81,7 +104,19 @@ const els = {
 let activeTab = null;
 let currentPdfUrl = "";
 let currentPageKind = "unknown";
+let currentSettings = { profile: "balanced", allowHeuristic: true };
+let highlightsEnabled = false;
 
+els.profileButtons.forEach((button) => {
+  button.addEventListener("click", () => updateSettings({
+    profile: button.dataset.profile,
+    allowHeuristic: getProfileConfig(button.dataset.profile).allowHeuristic
+  }));
+});
+els.allowHeuristic.addEventListener("change", () => updateSettings({
+  profile: currentSettings.profile,
+  allowHeuristic: els.allowHeuristic.checked
+}));
 els.openVocab.addEventListener("click", () => openVocab());
 els.enable.addEventListener("click", () => setHighlights(true));
 els.disable.addEventListener("click", () => setHighlights(false));
@@ -96,6 +131,8 @@ async function openVocab() {
 }
 
 async function refreshStatus() {
+  currentSettings = await loadSettings();
+  renderSettings();
   activeTab = await getActiveTab();
   const url = activeTab?.url || "";
   currentPdfUrl = extractPdfUrl(url);
@@ -180,6 +217,20 @@ async function setHighlights(enabled) {
   });
 }
 
+async function updateSettings(nextSettings) {
+  currentSettings = await saveSettings(nextSettings);
+  renderSettings();
+  els.status.textContent = highlightsEnabled ? "标黄策略已保存，正在刷新当前页面标黄。" : "标黄策略已保存，下次开启标黄时生效。";
+
+  if (!highlightsEnabled) return;
+  await sendToActiveTab({ type: "paper-reading-disable" });
+  await sendToActiveTab({
+    type: "paper-reading-enable",
+    sourceUrl: activeTab?.url || ""
+  });
+  await refreshStatus();
+}
+
 async function openPdfReader() {
   if (!currentPdfUrl) {
     await refreshStatus();
@@ -207,6 +258,7 @@ async function sendToActiveTab(message) {
 }
 
 function renderState({ connected, enabled, title, detail, message, showPdfReader }) {
+  highlightsEnabled = enabled;
   els.stateCard.classList.toggle("connected", connected);
   els.stateCard.classList.toggle("enabled", enabled);
   els.stateTitle.textContent = title;
@@ -216,6 +268,15 @@ function renderState({ connected, enabled, title, detail, message, showPdfReader
   els.disable.disabled = !connected || !enabled;
   els.openPdfReader.hidden = !showPdfReader;
   updateBadge(enabled);
+}
+
+function renderSettings() {
+  const config = getProfileConfig(currentSettings.profile);
+  els.profileDetail.textContent = config.detail;
+  els.allowHeuristic.checked = currentSettings.allowHeuristic;
+  els.profileButtons.forEach((button) => {
+    button.classList.toggle("active", button.dataset.profile === currentSettings.profile);
+  });
 }
 
 async function updateBadge(enabled) {

@@ -6,6 +6,14 @@
   const HIGHLIGHTED_ATTR = "data-paper-reading-highlighted";
   const IGNORED_KEY = "paperReadingIgnoredWords";
   const SAVED_KEY = "paperReadingSavedWords";
+  const SETTINGS_KEY = "paperReadingSettings";
+  const DEFAULT_SETTINGS = { profile: "balanced", allowHeuristic: true };
+  const PROFILE_CONFIGS = {
+    broad: { threshold: 1, allowHeuristic: true },
+    balanced: { threshold: 2, allowHeuristic: true },
+    advanced: { threshold: 4, allowHeuristic: true },
+    minimal: { threshold: 6, allowHeuristic: false }
+  };
 
   const COMMON_WORDS = new Set(
     `
@@ -234,6 +242,7 @@
   const dictChunks = new Map();
   let ignoredWords = new Set();
   let savedWords = {};
+  let settings = normalizeSettings(DEFAULT_SETTINGS);
 
   chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     if (message?.type === "paper-reading-status") {
@@ -352,12 +361,51 @@
     const entry = lookupDictionary(lemma) || LEXICON[lemma];
     if (entry?.h === false && lemma === clean) return null;
     if (entry) {
+      const isCore = Boolean(LEXICON[lemma]);
+      if (!isCore && !settings.allowHeuristic) return null;
+      const tag = Array.isArray(entry) ? entry[1] : entry.tag;
+      const difficulty = estimateDifficulty({ word: clean, lemma, tag, isCore });
+      if (!passesProfileFilter({ word: clean, tag, difficulty }, settings.profile)) return null;
       return Array.isArray(entry)
         ? { word: clean, lemma, zh: entry[0], tag: entry[1] }
         : { word: clean, lemma, zh: entry.zh, tag: entry.tag };
     }
 
     return null;
+  }
+
+  function estimateDifficulty({ word, lemma, tag, isCore }) {
+    let score = isCore ? 4 : 2;
+    if (/低频|GRE|GMAT|SAT|TOEFL|IELTS|进阶/i.test(tag || "")) score += 2;
+    if (/学术/.test(tag || "")) score += 1;
+    if (word.length >= 8) score += 1;
+    if (word !== lemma) score += 1;
+    return score;
+  }
+
+  function passesProfileFilter({ word, tag, difficulty }, profile) {
+    if (profile === "broad") return true;
+    if (profile === "advanced") {
+      if (/CET6\+?/i.test(tag || "") && !/低频|GRE|GMAT|SAT|TOEFL|IELTS/i.test(tag || "") && word.length < 8) {
+        return false;
+      }
+      return difficulty >= PROFILE_CONFIGS.advanced.threshold;
+    }
+    if (profile === "minimal") {
+      return /低频|GRE|GMAT|SAT|TOEFL|IELTS/i.test(tag || "") || (/学术/.test(tag || "") && word.length >= 9);
+    }
+    return difficulty >= PROFILE_CONFIGS.balanced.threshold;
+  }
+
+  function normalizeSettings(value) {
+    const input = value && typeof value === "object" ? value : DEFAULT_SETTINGS;
+    const profile = PROFILE_CONFIGS[input.profile] ? input.profile : DEFAULT_SETTINGS.profile;
+    return {
+      profile,
+      allowHeuristic: typeof input.allowHeuristic === "boolean"
+        ? input.allowHeuristic
+        : PROFILE_CONFIGS[profile].allowHeuristic
+    };
   }
 
   function collectCandidateLetters(root) {
@@ -541,14 +589,20 @@
   }
 
   async function loadUserLists() {
-    const data = await storageGet([IGNORED_KEY, SAVED_KEY]);
+    const data = await storageGet([IGNORED_KEY, SAVED_KEY, SETTINGS_KEY]);
     ignoredWords = new Set(Array.isArray(data[IGNORED_KEY]) ? data[IGNORED_KEY] : []);
     savedWords = data[SAVED_KEY] && typeof data[SAVED_KEY] === "object" ? data[SAVED_KEY] : {};
+    settings = normalizeSettings(data[SETTINGS_KEY]);
   }
 
   function storageGet(keys) {
     return new Promise((resolve) => {
-      chrome.storage.local.get(keys, resolve);
+      const area = chrome.storage.sync || chrome.storage.local;
+      area.get(keys, (syncData) => {
+        chrome.storage.local.get(keys, (localData) => {
+          resolve({ ...localData, ...syncData });
+        });
+      });
     });
   }
 

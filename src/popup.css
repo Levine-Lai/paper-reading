@@ -126,6 +126,77 @@ button {
   gap: 8px;
 }
 
+.settings-card {
+  display: grid;
+  gap: 10px;
+  padding: 11px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.settings-head {
+  display: grid;
+  gap: 2px;
+}
+
+.settings-head strong {
+  font-size: 0.9rem;
+}
+
+.settings-head span,
+.settings-toggle {
+  color: var(--muted);
+  font-size: 0.78rem;
+  line-height: 1.35;
+}
+
+.profile-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 7px;
+}
+
+.profile-grid button {
+  display: grid;
+  gap: 2px;
+  min-height: 58px;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfaf7;
+  color: var(--ink);
+  cursor: pointer;
+  text-align: left;
+}
+
+.profile-grid button.active {
+  border-color: rgba(47, 117, 107, 0.5);
+  background: var(--accent-soft);
+}
+
+.profile-grid button strong {
+  font-size: 0.82rem;
+}
+
+.profile-grid button span {
+  color: var(--muted);
+  font-size: 0.72rem;
+  line-height: 1.25;
+}
+
+.settings-toggle {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.settings-toggle input {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent);
+}
+
 .popup-button {
   display: flex;
   align-items: center;

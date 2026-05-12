@@ -3,6 +3,7 @@ import { BookOpenText, FileUp, Minus, Plus, createElement } from "lucide";
 import * as pdfjsLib from "pdfjs-dist";
 import workerUrl from "pdfjs-dist/build/pdf.worker.mjs?url";
 import { getWordInsight } from "./lexicon.js";
+import { buildInsightOptions, getProfileConfig, loadSettings, PROFILE_CONFIGS, saveSettings } from "./settings.js";
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = workerUrl;
 
@@ -33,9 +34,10 @@ app.innerHTML = `
           <i data-lucide="plus"></i>
         </button>
       </div>
-      <div class="segmented" aria-label="Difficulty threshold">
-        <button class="active" type="button" data-threshold="2">适中</button>
-        <button type="button" data-threshold="4">克制</button>
+      <div class="segmented" aria-label="Vocabulary profile">
+        ${Object.entries(PROFILE_CONFIGS).map(([key, profile]) => `
+          <button class="${key === "balanced" ? "active" : ""}" type="button" data-profile="${key}" title="${profile.detail}">${profile.label}</button>
+        `).join("")}
       </div>
       <label class="switch">
         <input id="heuristic-toggle" type="checkbox" checked />
@@ -113,8 +115,7 @@ const state = {
   pdf: null,
   fileName: "",
   scale: 1.2,
-  threshold: 2,
-  allowHeuristic: true,
+  settings: buildInsightOptions({ profile: "balanced" }),
   renderToken: 0,
   hits: new Map()
 };
@@ -152,15 +153,17 @@ els.zoomIn.addEventListener("click", () => setZoom(Math.min(2.2, state.scale + 0
 els.zoomOut.addEventListener("click", () => setZoom(Math.max(0.65, state.scale - 0.15)));
 
 els.segmented.addEventListener("click", (event) => {
-  const button = event.target.closest("button[data-threshold]");
+  const button = event.target.closest("button[data-profile]");
   if (!button) return;
-  state.threshold = Number(button.dataset.threshold);
+  applySettings({ profile: button.dataset.profile, allowHeuristic: getProfileConfig(button.dataset.profile).allowHeuristic });
+  saveSettings({ profile: button.dataset.profile, allowHeuristic: state.settings.allowHeuristic });
   els.segmented.querySelectorAll("button").forEach((item) => item.classList.toggle("active", item === button));
   rerenderIfReady();
 });
 
 els.heuristicToggle.addEventListener("change", () => {
-  state.allowHeuristic = els.heuristicToggle.checked;
+  applySettings({ profile: state.settings.profile, allowHeuristic: els.heuristicToggle.checked });
+  saveSettings({ profile: state.settings.profile, allowHeuristic: state.settings.allowHeuristic });
   rerenderIfReady();
 });
 
@@ -314,8 +317,9 @@ function layoutHighlights({ pageNumber, textContent, viewport, layer }) {
     for (const match of matches) {
       const rawWord = match[0];
       const insight = getWordInsight(rawWord, {
-        threshold: state.threshold,
-        allowHeuristic: state.allowHeuristic
+        profile: state.settings.profile,
+        threshold: state.settings.threshold,
+        allowHeuristic: state.settings.allowHeuristic
       });
       if (!insight) continue;
 
@@ -486,7 +490,21 @@ function getFileNameFromUrl(sourceUrl) {
 }
 
 updateZoomLabel();
+initSettings();
 
 if (initialSourceUrl) {
   loadPdfFromUrl(initialSourceUrl);
+}
+
+async function initSettings() {
+  applySettings(await loadSettings());
+  rerenderIfReady();
+}
+
+function applySettings(settings) {
+  state.settings = buildInsightOptions(settings);
+  els.heuristicToggle.checked = state.settings.allowHeuristic;
+  els.segmented.querySelectorAll("button[data-profile]").forEach((button) => {
+    button.classList.toggle("active", button.dataset.profile === state.settings.profile);
+  });
 }

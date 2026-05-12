@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite --host 127.0.0.1",
+    "setup:dict": "node scripts/setup-dict.mjs",
     "build:dict": "node scripts/build-web-dict.mjs",
     "build": "vite build",
     "build:extension": "vite build",

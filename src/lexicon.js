@@ -354,6 +354,7 @@ export function getWordInsight(raw, options = {}) {
   const threshold = options.threshold ?? 3;
   const allowHeuristic = options.allowHeuristic ?? true;
   if (!isKnown && (!allowHeuristic || score < threshold)) return null;
+  if (!passesProfileFilter({ clean, entry, isKnown, score }, options.profile)) return null;
 
   return {
     word: clean,
@@ -364,4 +365,22 @@ export function getWordInsight(raw, options = {}) {
     zh: entry?.zh || "疑似低频或学术词；本地词库暂未收录精确释义",
     reason: reasons.filter(Boolean).join(" · ") || "词形较复杂"
   };
+}
+
+function passesProfileFilter({ clean, entry, isKnown, score }, profile = "balanced") {
+  if (profile === "broad" || profile === "balanced") return true;
+
+  if (profile === "advanced") {
+    if (!isKnown) return score >= 4;
+    if (entry.tag === "CET6+" && clean.length < 8) return false;
+    return true;
+  }
+
+  if (profile === "minimal") {
+    if (!isKnown) return false;
+    if (entry.tag === "低频") return true;
+    return entry.tag === "学术" && clean.length >= 9;
+  }
+
+  return true;
 }
